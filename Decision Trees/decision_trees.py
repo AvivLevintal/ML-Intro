@@ -75,14 +75,12 @@ def calc_gini(data):
     Returns:
     - gini: The gini impurity value.
     """
-    gini = 0.0
-    classes = data[:,-1]
-    sample_size = len(classes)
-    unique, counts = np.unique(classes, return_counts=True)
-    for i in range(len(unique)):
-        gini = gini + (counts[i]/sample_size)**2
 
-    gini = 1 - gini
+    classes = data[:, -1]
+    sample_size = len(classes)
+    _ , counts = np.unique(classes, return_counts=True)
+    probabilities = np.square(counts/sample_size)
+    gini = 1 - np.sum(probabilities)
     return gini
 
 def calc_entropy(data):
@@ -95,15 +93,12 @@ def calc_entropy(data):
     Returns:
     - entropy: The entropy value.
     """
-    entropy = 0.0
-    classes = data[:,-1]
+    classes = data[:, -1]
     sample_size = len(classes)
-    unique, counts = np.unique(classes, return_counts=True)
-    for i in range(len(unique)):
-        prob = counts[i]/sample_size
-        entropy = entropy + prob*np.log2(prob)
-
-    entropy = -entropy
+    _ , counts = np.unique(classes, return_counts=True)
+    probabilities = counts/sample_size
+    log_probabilities = np.log2(probabilities)
+    entropy = -np.sum(probabilities * log_probabilities)
     return entropy
 
 def goodness_of_split(data, feature, impurity_func, gain_ratio=False):
@@ -127,18 +122,13 @@ def goodness_of_split(data, feature, impurity_func, gain_ratio=False):
     sample_size = len(data)
 
     if gain_ratio:
-        info_gain = calc_entropy(data)
+        info_gain, _ = goodness_of_split(data, feature, calc_entropy, False)
         split_info = 0.0
-
-        unique = np.unique(column_feature)    
-
-        for value in unique:
-            value_matrix = data[column_feature == value]
-            value_size = len(value_matrix)
-            groups[value] = value_matrix
-            info_gain -= (value_size/sample_size)*calc_entropy(value_matrix)
-            split_info -= (value_size/sample_size)*np.log2(value_size/sample_size)
-        
+        sample_size = len(data)
+        unique, counts = np.unique(column_feature, return_counts=True)
+        probabilities = counts/sample_size
+        log_probabilities = np.log2(probabilities)
+        split_info = -np.sum(probabilities * log_probabilities)
         
         if split_info == 0.0:
             goodness = 0.0
@@ -217,12 +207,13 @@ class DecisionNode:
             return
         
         degree_of_freedom = len(np.unique(self.data[:,self.feature])) - 1
+
         if self.chi == 1:
             chi_threshold = 0.0
         else:
             chi_threshold = chi_table[degree_of_freedom][self.chi]    
-        current_chi = chi_square(self.data, self.feature)
 
+        current_chi = chi_square(self.data, self.feature)
         if current_chi < chi_threshold:
             self.terminal = True
             return
@@ -230,8 +221,7 @@ class DecisionNode:
         _ ,b_feature = best_feature(self.data, impurity_func, self.gain_ratio)
         best_col = self.data[:,b_feature]
         unique = np.unique(best_col)
-        
-    
+            
         for value in unique:
             value_matrix = self.data[best_col == value]
             child = DecisionNode(data=value_matrix, depth=self.depth+1, chi=self.chi, max_depth=self.max_depth, gain_ratio=self.gain_ratio)
@@ -245,7 +235,7 @@ def chi_square(data, feature):
 
     for i, value in enumerate(Df_unique):
         Df = Df_counts[i]
-        p_y_0 = class_counts[0]/class_size
+        p_y_0 = class_counts[0]/ class_size
         p_y_1 = 1 - p_y_0
         e_0 = Df*p_y_0
         e_1 = Df*p_y_1
@@ -264,7 +254,6 @@ def best_feature(data, impurity_func, gain_ratio=False):
 
     for f in range(features):
         c_goodness, c_groups = goodness_of_split(data, f, impurity_func, gain_ratio=gain_ratio)
-
         if c_goodness > maximal_goodness:
             maximal_goodness = c_goodness
             b_feature = f
@@ -281,7 +270,7 @@ def build_tree(data, impurity, gain_ratio=False, chi=1, max_depth=1000):
 
     Input:
     - data: the training dataset.
-    - impurity: the chosen impurity measure. Notice that you can send a function
+    - impurity: the chosen im   xpurity measure. Notice that you can send a function
                 as an argument in python.
     - gain_ratio: goodness of split or gain ratio flag
 
@@ -291,7 +280,7 @@ def build_tree(data, impurity, gain_ratio=False, chi=1, max_depth=1000):
     q = queue.Queue()
     q.put(root)
     while not q.empty():
-
+        #print(q.qsize())
         current = q.get()
         perfect_check = np.unique(current.data[:,-1])
         if len(perfect_check) == 1:
@@ -350,6 +339,7 @@ def calc_accuracy(node, dataset):
             corret_predictions += 1
     
     accuracy = corret_predictions/sample_size
+
     return accuracy
 
 def depth_pruning(X_train, X_test):
